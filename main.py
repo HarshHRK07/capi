@@ -38,7 +38,7 @@ def create_payment_method(card_details):
             expiration_month = response_json['card'].get('exp_month')
             expiration_year = response_json['card'].get('exp_year')
             brand = response_json['card'].get('brand')
-            return payment_method_id, last_four_digits, expiration_month, expiration_year
+            return payment_method_id, last_four_digits, expiration_month, expiration_year, brand
         else:
             return None, None, None, None
     else:
