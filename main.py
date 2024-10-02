@@ -143,5 +143,4 @@ def inbuilt_cvv():
     return handle_payment(public_key, client_secret, card_details, stripe_account, include_cvc=True)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', PORT= 8080), debug=True)
-                   
+    app.run(host='0.0.0.0', port=8080, debug=True)
