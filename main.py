@@ -112,8 +112,7 @@ def inbuilt_ccn():
             authenticate_3ds(three_ds_source, public_key)  # No need to store or return the response
 
             # Step 4: Reconfirm Payment Intent after 3DS Authentication
-            payment_intent_id = confirm_response['id']
-            reconfirm_response = retrieve_payment_intent(payment_intent_id, public_key, stripe_account)
+            reconfirm_response = retrieve_payment_intent(client_secret, public_key, stripe_account)
             return jsonify(format_response(reconfirm_response))
         else:
             # No 3DS required, return the first confirmation response
@@ -145,8 +144,7 @@ def inbuilt_cvv():
             authenticate_3ds(three_ds_source, public_key)  # No need to store or return the response
 
             # Step 4: Reconfirm Payment Intent after 3DS Authentication
-            payment_intent_id = confirm_response['id']
-            reconfirm_response = retrieve_payment_intent(payment_intent_id, public_key, stripe_account)
+            reconfirm_response = retrieve_payment_intent(client_secret, public_key, stripe_account)
             return jsonify(format_response(reconfirm_response))
         else:
             # No 3DS required, return the first confirmation response
