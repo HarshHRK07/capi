@@ -69,15 +69,14 @@ def authenticate_3ds(source, client_secret, public_key):
     response = requests.post(THREEDS_AUTHENTICATE_URL, data=payload, headers=COMMON_HEADERS)
     return response.json()
 
-def retrieve_payment_intent(payment_intent_id, client_secret, public_key, stripe_account=None):
+def retrieve_payment_intent(payment_intent_id, public_key, stripe_account=None):
     """
     Retrieve the payment intent status after 3DS.
     """
     url = f"{PAYMENT_INTENT_URL}/{payment_intent_id}"
 
     params = {
-        'key': public_key,
-        'client_secret': client_secret
+        'key': public_key
     }
 
     if stripe_account:
@@ -120,14 +119,10 @@ def inbuilt_ccn():
             if 'error' in auth_response:
                 return jsonify(format_response(auth_response)), 400
 
-            # Step 4: If 3DS Authentication Succeeds, Reconfirm Payment Intent
-            if auth_response.get('state') == 'succeeded' and auth_response['ares']['transStatus'] == 'Y':
-                payment_intent_id = confirm_response['id']
-                reconfirm_response = retrieve_payment_intent(payment_intent_id, client_secret, public_key, stripe_account)
-                return jsonify(format_response(reconfirm_response))
-            else:
-                # 3DS failed, return the authentication response
-                return jsonify(format_response(auth_response))
+            # Step 4: Reconfirm Payment Intent after 3DS Authentication
+            payment_intent_id = confirm_response['id']
+            reconfirm_response = retrieve_payment_intent(payment_intent_id, public_key, stripe_account)
+            return jsonify(format_response(reconfirm_response))
         else:
             # No 3DS required, return the first confirmation response
             return jsonify(format_response(confirm_response))
@@ -159,14 +154,10 @@ def inbuilt_cvv():
             if 'error' in auth_response:
                 return jsonify(format_response(auth_response)), 400
 
-            # Step 4: If 3DS Authentication Succeeds, Reconfirm Payment Intent
-            if auth_response.get('state') == 'succeeded' and auth_response['ares']['transStatus'] == 'Y':
-                payment_intent_id = confirm_response['id']
-                reconfirm_response = retrieve_payment_intent(payment_intent_id, client_secret, public_key, stripe_account)
-                return jsonify(format_response(reconfirm_response))
-            else:
-                # 3DS failed, return the authentication response
-                return jsonify(format_response(auth_response))
+            # Step 4: Reconfirm Payment Intent after 3DS Authentication
+            payment_intent_id = confirm_response['id']
+            reconfirm_response = retrieve_payment_intent(payment_intent_id, public_key, stripe_account)
+            return jsonify(format_response(reconfirm_response))
         else:
             # No 3DS required, return the first confirmation response
             return jsonify(format_response(confirm_response))
@@ -175,4 +166,4 @@ def inbuilt_cvv():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
-            
+    
