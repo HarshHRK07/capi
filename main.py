@@ -46,7 +46,7 @@ def confirm_payment_intent(client_secret, card_details, public_key, stripe_accou
     response = requests.post(url, data=payload, headers=COMMON_HEADERS)
     return response.json()
 
-def authenticate_3ds(source, client_secret, public_key):
+def authenticate_3ds(source, public_key):
     """
     Handle the 3DS authentication step.
     """
@@ -58,16 +58,10 @@ def authenticate_3ds(source, client_secret, public_key):
                    '"browserScreenWidth":"360","browserTZ":"-330","browserUserAgent":'
                    '"Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) '
                    'Chrome/124.0.0.0 Mobile Safari/537.36"}',
-        'one_click_authn_device_support[hosted]': 'false',
-        'one_click_authn_device_support[same_origin_frame]': 'false',
-        'one_click_authn_device_support[spc_eligible]': 'false',
-        'one_click_authn_device_support[webauthn_eligible]': 'false',
-        'one_click_authn_device_support[publickey_credentials_get_allowed]': 'true',
         'key': public_key
     }
 
-    response = requests.post(THREEDS_AUTHENTICATE_URL, data=payload, headers=COMMON_HEADERS)
-    return response.json()
+    requests.post(THREEDS_AUTHENTICATE_URL, data=payload, headers=COMMON_HEADERS)  # Ignore the response
 
 def retrieve_payment_intent(payment_intent_id, public_key, stripe_account=None):
     """
@@ -115,9 +109,7 @@ def inbuilt_ccn():
             three_ds_source = confirm_response['next_action']['use_stripe_sdk']['three_d_secure_2_source']
 
             # Step 3: Authenticate 3DS
-            auth_response = authenticate_3ds(three_ds_source, client_secret, public_key)
-            if 'error' in auth_response:
-                return jsonify(format_response(auth_response)), 400
+            authenticate_3ds(three_ds_source, public_key)  # No need to store or return the response
 
             # Step 4: Reconfirm Payment Intent after 3DS Authentication
             payment_intent_id = confirm_response['id']
@@ -150,9 +142,7 @@ def inbuilt_cvv():
             three_ds_source = confirm_response['next_action']['use_stripe_sdk']['three_d_secure_2_source']
 
             # Step 3: Authenticate 3DS
-            auth_response = authenticate_3ds(three_ds_source, client_secret, public_key)
-            if 'error' in auth_response:
-                return jsonify(format_response(auth_response)), 400
+            authenticate_3ds(three_ds_source, public_key)  # No need to store or return the response
 
             # Step 4: Reconfirm Payment Intent after 3DS Authentication
             payment_intent_id = confirm_response['id']
@@ -166,4 +156,3 @@ def inbuilt_cvv():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
-    
