@@ -1,12 +1,7 @@
 from flask import Flask, request, jsonify
 import requests
-import logging
-import os
 
 app = Flask(__name__)
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
 
 # Define URLs
 PAYMENT_INTENT_URL = "https://api.stripe.com/v1/payment_intents"
@@ -31,8 +26,7 @@ def confirm_payment_intent(client_secret, card_details, public_key, stripe_accou
     card_number, exp_month, exp_year = card_info[:3]
     cvc = card_info[3] if include_cvc and len(card_info) > 3 else None
 
-    payment_intent_id = client_secret.split('_secret_')[0]
-    url = f"{PAYMENT_INTENT_URL}/{payment_intent_id}/confirm"
+    url = f"{PAYMENT_INTENT_URL}/{client_secret.split('_secret_')[0]}/confirm"
 
     payload = {
         'payment_method_data[type]': 'card',
@@ -69,19 +63,17 @@ def authenticate_3ds(source, public_key):
 
     requests.post(THREEDS_AUTHENTICATE_URL, data=payload, headers=COMMON_HEADERS)  # Ignore the response
 
-def retrieve_payment_intent(client_secret, public_key, stripe_account=None):
+def retrieve_payment_intent(payment_intent_id, client_secret, public_key):
     """
     Retrieve the payment intent status after 3DS.
     """
-    payment_intent_id = client_secret.split('_secret_')[0]
     url = f"{PAYMENT_INTENT_URL}/{payment_intent_id}"
 
     params = {
-        'key': public_key
+        'key': public_key,
+        'client_secret': client_secret,
+        'is_stripe_sdk': "false"
     }
-
-    if stripe_account:
-        params['_stripe_account'] = stripe_account
 
     response = requests.get(url, params=params, headers=COMMON_HEADERS)
     return response.json()
@@ -95,52 +87,72 @@ def format_response(response):
         "response": response
     }
 
-def handle_payment(public_key, client_secret, card_details, stripe_account, include_cvc):
-    """
-    Handle the payment process including confirmation and 3DS flow.
-    """
-    confirm_response = confirm_payment_intent(client_secret, card_details, public_key, stripe_account, include_cvc)
-    
-    if 'error' in confirm_response:
-        return jsonify(format_response(confirm_response)), 400
-
-    if confirm_response.get('status') == 'requires_action':
-        three_ds_source = confirm_response['next_action']['use_stripe_sdk']['three_d_secure_2_source']
-        authenticate_3ds(three_ds_source, public_key)  # Authenticate 3DS
-        reconfirm_response = retrieve_payment_intent(client_secret, public_key, stripe_account)
-        return jsonify(format_response(reconfirm_response))
-
-    return jsonify(format_response(confirm_response))
-
 @app.route('/inbuilt/ccn', methods=['GET'])
 def inbuilt_ccn():
     """
-    Endpoint to handle payment confirmation without CVC.
+    Endpoint to handle payment confirmation and 3DS flow.
     """
-    public_key = request.args.get('pk')
-    client_secret = request.args.get('cs')
-    card_details = request.args.get('cc')
-    stripe_account = request.args.get('act')
+    try:
+        public_key = request.args.get('pk')
+        client_secret = request.args.get('cs')
+        card_details = request.args.get('cc')
+        stripe_account = request.args.get('act')
 
-    if not client_secret:
-        return jsonify(format_response({'error': 'Missing client_secret parameter'})), 400
+        # Step 1: Confirm Payment Intent
+        confirm_response = confirm_payment_intent(client_secret, card_details, public_key, stripe_account, include_cvc=False)
+        if 'error' in confirm_response:
+            return jsonify(format_response(confirm_response)), 400
 
-    return handle_payment(public_key, client_secret, card_details, stripe_account, include_cvc=False)
+        # Step 2: Check if 3DS Authentication is Required
+        if confirm_response.get('status') == 'requires_action':
+            three_ds_source = confirm_response['next_action']['use_stripe_sdk']['three_d_secure_2_source']
+
+            # Step 3: Authenticate 3DS
+            authenticate_3ds(three_ds_source, public_key)
+
+            # Step 4: Reconfirm Payment Intent after 3DS Authentication
+            payment_intent_id = client_secret.split('_secret_')[0]  # Extracting the payment intent ID
+            reconfirm_response = retrieve_payment_intent(payment_intent_id, client_secret, public_key)
+            return jsonify(format_response(reconfirm_response))
+        else:
+            # No 3DS required, return the first confirmation response
+            return jsonify(format_response(confirm_response))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 @app.route('/inbuilt/cvv', methods=['GET'])
 def inbuilt_cvv():
     """
-    Endpoint to handle payment confirmation with CVC.
+    Endpoint to handle payment confirmation with CVC and 3DS flow.
     """
-    public_key = request.args.get('pk')
-    client_secret = request.args.get('cs')
-    card_details = request.args.get('cc')
-    stripe_account = request.args.get('act')
+    try:
+        public_key = request.args.get('pk')
+        client_secret = request.args.get('cs')
+        card_details = request.args.get('cc')
+        stripe_account = request.args.get('act')
 
-    if not client_secret:
-        return jsonify(format_response({'error': 'Missing client_secret parameter'})), 400
+        # Step 1: Confirm Payment Intent with CVC
+        confirm_response = confirm_payment_intent(client_secret, card_details, public_key, stripe_account, include_cvc=True)
+        if 'error' in confirm_response:
+            return jsonify(format_response(confirm_response)), 400
 
-    return handle_payment(public_key, client_secret, card_details, stripe_account, include_cvc=True)
+        # Step 2: Check if 3DS Authentication is Required
+        if confirm_response.get('status') == 'requires_action':
+            three_ds_source = confirm_response['next_action']['use_stripe_sdk']['three_d_secure_2_source']
+
+            # Step 3: Authenticate 3DS
+            authenticate_3ds(three_ds_source, public_key)
+
+            # Step 4: Reconfirm Payment Intent after 3DS Authentication
+            payment_intent_id = client_secret.split('_secret_')[0]  # Extracting the payment intent ID
+            reconfirm_response = retrieve_payment_intent(payment_intent_id, client_secret, public_key)
+            return jsonify(format_response(reconfirm_response))
+        else:
+            # No 3DS required, return the first confirmation response
+            return jsonify(format_response(confirm_response))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=True)
+        
